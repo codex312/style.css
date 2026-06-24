@@ -1,5 +1,5 @@
 /* ============================================================
-   USA NUMBER LOOKUP - SCRIPT.JS (PHP Backend)
+   USA NUMBER LOOKUP - SCRIPT.JS (CORS Proxy)
    ============================================================ */
 
 const state = {
@@ -48,17 +48,50 @@ function formatPhoneDisplay(phone) {
     return '(' + phone.substring(0, 3) + ') ' + phone.substring(3, 6) + '-' + phone.substring(6, 10);
 }
 
-// ===== API CALLS VIA PHP BACKEND =====
+// ===== API CALLS WITH CORS PROXY =====
+async function fetchWithProxy(url) {
+    // Try multiple methods
+    const methods = [
+        // Method 1: AllOrigins Proxy
+        async () => {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`AllOrigins failed: ${res.status}`);
+            return res.json();
+        },
+        // Method 2: CorsProxy.io
+        async () => {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`CorsProxy failed: ${res.status}`);
+            return res.json();
+        },
+        // Method 3: Direct (if CORS extension is on)
+        async () => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Direct failed: ${res.status}`);
+            return res.json();
+        }
+    ];
+
+    for (const method of methods) {
+        try {
+            return await method();
+        } catch (e) {
+            console.log('Method failed, trying next...', e.message);
+        }
+    }
+    throw new Error('All proxy methods failed');
+}
+
 async function fetchPerson(phone) {
-    const res = await fetch(`proxy.php?action=person&x=${phone}`);
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    return res.json();
+    const url = `https://api.infolookup.site/v1/?x=${phone}`;
+    return await fetchWithProxy(url);
 }
 
 async function fetchTCPA(phone) {
-    const res = await fetch(`proxy.php?action=tcpa&x=${phone}`);
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    return res.json();
+    const url = `https://api.infolookup.site/tcpa/v1?x=${phone}`;
+    return await fetchWithProxy(url);
 }
 
 // ===== SEARCH =====
@@ -94,7 +127,7 @@ async function performSearch() {
     } catch (error) {
         console.error('Search error:', error);
         hideLoading();
-        showError(`Search failed: ${error.message}`);
+        showError(`Search failed: ${error.message}. Please try again.`);
     }
 }
 
@@ -117,16 +150,9 @@ function renderCompliance(tcpaData, phone) {
 
     const status = tcpaData?.results?.status || '';
     const isDNC = status.includes('DNC');
-    const isFederal = status.includes('Federal');
-    const isState = status.includes('State');
-
-    let dncText = 'Clean';
-    if (isFederal && isState) dncText = 'Federal & State DNC';
-    else if (isFederal) dncText = 'Federal DNC';
-    else if (isState) dncText = 'State DNC';
 
     dncEl.innerHTML = isDNC
-        ? `<span class="status-flagged"><i class="fas fa-exclamation-circle"></i> ${dncText}</span>`
+        ? `<span class="status-flagged"><i class="fas fa-exclamation-circle"></i> ${status}</span>`
         : `<span class="status-clean"><i class="fas fa-check-circle"></i> Clean</span>`;
 
     litEl.innerHTML = `<span class="status-clean"><i class="fas fa-check-circle"></i> Clean</span>`;
@@ -305,5 +331,5 @@ window.fillSample = fillSample;
 window.toggleRawData = toggleRawData;
 
 console.log('🚀 USA Number Lookup loaded successfully!');
-console.log('📞 Using PHP Backend Proxy for API calls.');
+console.log('📞 Using CORS Proxy for API calls.');
 console.log('✅ No CORS issues!');
